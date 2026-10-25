@@ -1,0 +1,39 @@
+# divanmakam konu sayfalarindan PDF eki adreslerini toplar; veriler ve sonuc "dm-tarama" dalinda durur
+# (o dala yapilan kayitlar siteyi yeniden yayimlatmaz). Her calisma kaldigi yerden en cok 50 dakika devam eder.
+name: dm-tarama
+on:
+  workflow_dispatch:
+    inputs:
+      sinir:
+        description: "En cok kac konu (bos: zaman sinirina kadar)"
+        required: false
+        default: ""
+permissions:
+  contents: write
+concurrency:
+  group: dm-tarama
+  cancel-in-progress: false
+jobs:
+  tara:
+    runs-on: ubuntu-latest
+    timeout-minutes: 58
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dm-tarama
+      - name: Bitti mi
+        id: durum
+        run: if [ -f BITTI ]; then echo "bitti=1" >> "$GITHUB_OUTPUT"; fi
+      - name: Tara
+        if: steps.durum.outputs.bitti != '1'
+        run: |
+          if [ -n "${{ github.event.inputs.sinir }}" ]; then S="--sinir ${{ github.event.inputs.sinir }}"; fi
+          python3 dm_pdf_adres_bulut.py --dakika 50 $S
+      - name: Sonucu kaydet
+        if: steps.durum.outputs.bitti != '1'
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add pdf_adres.json BITTI 2>/dev/null || git add pdf_adres.json
+          git commit -m "pdf_adres: $(python3 -c 'import json;print(len(json.load(open("pdf_adres.json"))))') konu" || exit 0
+          git push
