@@ -2,13 +2,15 @@
 
 Girdi: konular.txt (her satir bir konu adresi). Cikti: pdf_adres.json {konu adresi: [ek adresi, ...]} (bos liste: PDF yok).
 Kaldigi yerden devam eder; --sinir N (en cok N konu) ve --dakika M (en cok M dakika) ile parca parca calisir.
-Siteyi yormamak icin istekler arasi 1 sn. Ust uste cok hata olursa (engellenme) durur.
+Siteyi yormamak icin istekler arasi 2 sn. Site 503/429 verirse (yogunluk, gecici engel) giderek uzayan surelerle
+(1, 2, 4 ... en cok 15 dk) bekleyip ayni sayfayi yeniden dener; 2 saat boyunca hic yanit alinamazsa durur.
 """
 import json
 import os
 import re
 import sys
 import time
+import urllib.error
 import urllib.request
 
 SITE = "https://divanmakam.com"
@@ -31,28 +33,42 @@ def main():
     sonuc = json.load(open(CIKTI, encoding="utf-8")) if os.path.exists(CIKTI) else {}
     kalan = [u for u in konular if u not in sonuc][:sinir]
     print("konu %d, yapilmis %d, bu parcada en cok %d" % (len(konular), len(konular) - len([u for u in konular if u not in sonuc]), len(kalan)), flush=True)
-    hata_ust_uste, yapilan = 0, 0
+    hata_ust_uste, yapilan, ilk_hata = 0, 0, None
     for url in kalan:
+        while time.time() < bitis:
+            try:
+                istek = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (nota-arsivi; kisisel arsiv)"})
+                s = urllib.request.urlopen(istek, timeout=60).read().decode("utf-8", "replace")
+                ekler = []
+                for ek in re.findall(r'href="(/attachments/[^"/]+-pdf\.\d+/)"', s):
+                    if SITE + ek not in ekler:
+                        ekler.append(SITE + ek)
+                sonuc[url] = ekler
+                hata_ust_uste, ilk_hata = 0, None
+                yapilan += 1
+                break
+            except urllib.error.HTTPError as e:
+                if e.code == 404:  # konu silinmis: bos sayilir, tekrar denenmez
+                    sonuc[url] = []
+                    break
+                hata_ust_uste += 1
+                ilk_hata = ilk_hata or time.time()
+                bekle = min(60 * 2 ** (hata_ust_uste - 1), 900)
+                print("hata %s: %s, %d sn bekleniyor" % (e.code, url, bekle), flush=True)
+            except Exception as e:  # noqa: BLE001
+                hata_ust_uste += 1
+                ilk_hata = ilk_hata or time.time()
+                bekle = min(60 * 2 ** (hata_ust_uste - 1), 900)
+                print("hata: %s %s, %d sn bekleniyor" % (url, e, bekle), flush=True)
+            if time.time() - ilk_hata > 7200:
+                print("2 saattir yanit yok, duruldu", flush=True)
+                kaydet(sonuc)
+                return
+            kaydet(sonuc)
+            time.sleep(bekle)
         if time.time() > bitis:
             break
-        try:
-            istek = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (nota-arsivi; kisisel arsiv)"})
-            s = urllib.request.urlopen(istek, timeout=60).read().decode("utf-8", "replace")
-            ekler = []
-            for ek in re.findall(r'href="(/attachments/[^"/]+-pdf\.\d+/)"', s):
-                if SITE + ek not in ekler:
-                    ekler.append(SITE + ek)
-            sonuc[url] = ekler
-            hata_ust_uste = 0
-            yapilan += 1
-        except Exception as e:  # noqa: BLE001
-            hata_ust_uste += 1
-            print("hata:", url, e, flush=True)
-            if hata_ust_uste >= 20:
-                print("ust uste 20 hata: site erisimi engelliyor olabilir, duruldu", flush=True)
-                break
-            time.sleep(10)
-        time.sleep(1)
+        time.sleep(2)
         if yapilan and yapilan % 200 == 0:
             kaydet(sonuc)
     kaydet(sonuc)
