@@ -169,7 +169,9 @@
       parcalar.push(p.value); n += p.value.length;
       yaz(Math.min(99, Math.floor(n * 100 / BOY)));
     }
-    yaz(100);
+    // veri indi; katalogun kurulmasi birkac saniye surer, bu sirada sayfa donar: yazi once ekrana ciksin
+    durum.textContent = "Katalog hazırlanıyor…"; cubuk.style.width = "100%";
+    await new Promise(function (ok) { requestAnimationFrame(function () { setTimeout(ok, 30); }); });
     calistir(await new Blob(parcalar).text());
     calistir(document.getElementById("ana-betik").textContent);
   }).catch(function (h) {
