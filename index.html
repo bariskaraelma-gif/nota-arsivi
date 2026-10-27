@@ -158,12 +158,12 @@
 <script>
 (function () {
   var durum = document.getElementById("arsiv-durum"), kutu = document.getElementById("yukleme"),
-      cubuk = document.getElementById("yukleme-cubuk"), BOY = 24432494;
+      cubuk = document.getElementById("yukleme-cubuk"), BOY = 24432390;
   kutu.hidden = false;
   function yaz(y) { durum.textContent = "Katalog yükleniyor… %" + y; cubuk.style.width = y + "%"; }
   function calistir(metin) { var s = document.createElement("script"); s.textContent = metin; document.body.appendChild(s); }
   yaz(0);
-  fetch("veri.93c7099f21.js").then(async function (r) {
+  fetch("veri.27e9d4fb4c.js").then(async function (r) {
     if (!r.ok) throw new Error("HTTP " + r.status);
     var okur = r.body.getReader(), parcalar = [], n = 0;
     for (;;) {
@@ -215,15 +215,17 @@ const FORM_ACIK = {
 };
 const formAcik = f => FORM_ACIK[f] || f;
 // Makam adlarinin tek yazimi (makam_esle.py, kullanicinin karariyla): {arsivdeki yazim: [kartta, suzgecte]}.
-// Kartta parantezli ad (Hicaz (Hümayun)), makam suzgecinde ana makam (Hicaz): e.mk
+// Kartta parantezli ad (Hicaz (Hümayun)), makam suzgecinde ana makam (Hicaz): e.mk. Suzgec adi liste olabilir
+// (Hicaz Aşiran (Rahatfeza) -> hem Hicaz Aşiran hem Rahatfeza altinda)
 const MAKAM_ESLE = window.MAKAM_ESLE || {};
 function makamDuzelt(e) {
   if (e[0] !== "S" || !e[4]) return;
   const [kart, suzgec] = MAKAM_ESLE[e[4].trim()] || [e[4], e[4].replace(/\s*\(.*$/, "")];
   e[4] = kart;
-  if (suzgec && suzgec !== kart) e.mk = suzgec;
+  const liste = [].concat(suzgec || []);
+  if (liste.length && (liste.length > 1 || liste[0] !== kart)) e.mk = liste;
 }
-const alanDegeri = (e, a) => (a === 4 && e.mk) || e[a];
+const alanDegerleri = (e, a) => (a === 4 && e.mk) || [e[a]];
 E.forEach(e => { e[5] = formAcik(e[5]); makamDuzelt(e); });
 function eklenmisKayit(dosyalar, k) {
   const e = [k.t, ...k.d, dosyalar];
@@ -401,7 +403,7 @@ let aktifTur = "S", kayitsizMod = false;
 
 function degerler(tur, alan) {
   const sayac = new Map();
-  for (const e of E) if (e[0] === tur && e[alan]) sayac.set(alanDegeri(e, alan), (sayac.get(alanDegeri(e, alan)) || 0) + 1);
+  for (const e of E) if (e[0] === tur && e[alan]) for (const d of alanDegerleri(e, alan)) sayac.set(d, (sayac.get(d) || 0) + 1);
   return sayac;
 }
 // Yazilabilir acilir kutular: listeden secilebilir ya da elle yazilabilir.
@@ -479,7 +481,7 @@ function filtrele() {
     if (nota === "yok" && notaVar(e)) return false;
     if (nota.startsWith("k:") && !kaynaklari(i).has(nota.slice(2))) return false;
     if (nota === "adtutmaz" && !AD_TUTMAZ.has(e[9])) return false;
-    for (const [a, v] of sec) if (!v.has(alanDegeri(e, a))) return false;
+    for (const [a, v] of sec) if (!alanDegerleri(e, a).some(d => v.has(d))) return false;
     return metinUyar(i);
   });
   // Ayni arama oteki turde de sonuc veriyorsa haber ver
