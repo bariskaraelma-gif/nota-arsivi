@@ -158,12 +158,12 @@
 <script>
 (function () {
   var durum = document.getElementById("arsiv-durum"), kutu = document.getElementById("yukleme"),
-      cubuk = document.getElementById("yukleme-cubuk"), BOY = 24414550;
+      cubuk = document.getElementById("yukleme-cubuk"), BOY = 24414698;
   kutu.hidden = false;
   function yaz(y) { durum.textContent = "Katalog yükleniyor… %" + y; cubuk.style.width = y + "%"; }
   function calistir(metin) { var s = document.createElement("script"); s.textContent = metin; document.body.appendChild(s); }
   yaz(0);
-  fetch("veri.5673cd4047.js").then(async function (r) {
+  fetch("veri.a29493b073.js").then(async function (r) {
     if (!r.ok) throw new Error("HTTP " + r.status);
     var okur = r.body.getReader(), parcalar = [], n = 0;
     for (;;) {
