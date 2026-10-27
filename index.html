@@ -406,6 +406,21 @@ function degerler(tur, alan) {
   for (const e of E) if (e[0] === tur && e[alan]) for (const d of alanDegerleri(e, alan)) sayac.set(d, (sayac.get(d) || 0) + 1);
   return sayac;
 }
+// Kutu bosken acilir listede yalniz bu kadar ve daha cok eseri olan degerler; bir harf yazilinca hepsi oneri olur
+// (az eserli makamlar kaybolmaz, liste kalabalik olmaz). Suzme her degerle calisir.
+const LISTE_ESIGI = { 4: 50 };
+function listeDoldur(s) {
+  const tum = !s.esik || s.el.value.trim() !== "";
+  if (s.dolu === tum) return;
+  s.dolu = tum;
+  s.liste.innerHTML = "";
+  for (const [d, n] of s.secenekler) {
+    if (!tum && n < s.esik) continue;
+    const o = document.createElement("option");
+    o.value = d; o.label = n.toLocaleString("tr") + " eser";
+    s.liste.appendChild(o);
+  }
+}
 // Yazilabilir acilir kutular: listeden secilebilir ya da elle yazilabilir.
 // Yazilan deger bir secenekle aynıysa birebir, degilse "icinde gecen" olarak suzulur ("dede" -> Dede Efendi).
 function suzgecKur(temizle) {
@@ -414,14 +429,11 @@ function suzgecKur(temizle) {
     s.alan = alan;
     s.el.placeholder = ad; s.el.title = ad + " (listeden seçin ya da yazın)";
     if (temizle) s.el.value = "";
-    s.liste.innerHTML = "";
-    if (alan !== 9) {  // repertuvar numaralari listelenmez, yazilir
-      for (const d of [...sayac.keys()].sort(sirala)) {
-        const o = document.createElement("option");
-        o.value = d; o.label = sayac.get(d).toLocaleString("tr") + " eser";
-        s.liste.appendChild(o);
-      }
-    }
+    // repertuvar numaralari listelenmez, yazilir
+    s.secenekler = alan === 9 ? [] : [...sayac.keys()].sort(sirala).map(d => [d, sayac.get(d)]);
+    s.esik = LISTE_ESIGI[alan] || 0;
+    s.dolu = null;
+    listeDoldur(s);
     s.sade = new Map([...sayac.keys()].map(d => [d, kelimeli(d)]));
   });
 }
@@ -615,7 +627,7 @@ function adrestenEser() {
   if ((e[0] === "K") !== kayitsizMod) { kayitsizMod = e[0] === "K"; filtrele(); }
   let n = sonuc.indexOf(i);
   if (n < 0) {  // suzgece takiliyor: arama temizlenir
-    $("ara").value = ""; suzgecler.forEach(s => { s.el.value = ""; }); $("f-nota").value = "";
+    $("ara").value = ""; suzgecler.forEach(s => { s.el.value = ""; listeDoldur(s); }); $("f-nota").value = "";
     filtrele(); n = sonuc.indexOf(i);
   }
   return n;
@@ -1272,7 +1284,7 @@ document.querySelectorAll(".tur").forEach(b => { b.onclick = () => turSec(b.data
 $("sayi").addEventListener("click", ev => { const a = ev.target.closest("a"); if (a) { ev.preventDefault(); turSec(a.dataset.tur); } });
 $("kayitsiz").onclick = () => { kayitsizMod = !kayitsizMod; notaKutusuKur(); filtrele(); };
 $("f-nota").addEventListener("change", filtrele);
-for (const s of suzgecler) s.el.addEventListener("input", () => gecikmeli(200));
+for (const s of suzgecler) s.el.addEventListener("input", () => { listeDoldur(s); gecikmeli(200); });
 for (const s of suzgecler) s.el.addEventListener("click", () => { try { s.el.showPicker(); } catch (e) { /* eski tarayici */ } });
 $("detay").addEventListener("click", ev => {
   const b = ev.target.closest("button.kaynak");
@@ -1297,7 +1309,7 @@ $("basliklar").addEventListener("click", ev => {
   if (siralama !== s) { siralama = s; artan = true; } else if (artan) artan = false; else siralama = null;
   basliklariKur(); filtrele();
 });
-$("temizle").onclick = () => { $("ara").value = ""; document.querySelectorAll("#suzgec input").forEach(s => { s.value = ""; }); $("f-nota").value = CV ? "var" : ""; filtrele(); $("ara").focus(); };
+$("temizle").onclick = () => { $("ara").value = ""; suzgecler.forEach(s => { s.el.value = ""; listeDoldur(s); }); $("f-nota").value = CV ? "var" : ""; filtrele(); $("ara").focus(); };
 if (CV) {  // cevrimici: zip yok, kalem/kayit yok; varsayilan olarak yalniz cevrimici notasi olan eserler
   $("arsiv").hidden = true; $("kayitsiz").hidden = true;
   (async () => {  // bu tarayicida daha once zip secildiyse: "Arsive baglan" seridi (izin varsa dogrudan baglanir)
