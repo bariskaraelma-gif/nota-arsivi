@@ -1046,7 +1046,10 @@ $("f-6").addEventListener("input", () => {
   $("f-6").value = "";
   $("f-6").dispatchEvent(new Event("input"));
   cvSerit("sec");
-  $("arsiv-sec").click();  // yazma bir kullanici hareketi: Windows'un dosya penceresi dogrudan acilir
+  // kutunun oneri listesi acikken pencere acilirsa fare imleci kayboluyor: once kutudan cikilir, liste kapanir.
+  // Yazma bir kullanici hareketi; birkac saniye icinde Windows'un dosya penceresi dogrudan acilabilir.
+  $("f-6").blur();
+  setTimeout(() => $("arsiv-sec").click(), 150);
 });
 if (!CV) (async () => {
   try {
