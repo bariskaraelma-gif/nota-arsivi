@@ -33,6 +33,8 @@
   #arsiv.yok { background: #fff4d6; }
   #arsiv button, #bos button { font-size: 13px; padding: 4px 12px; border: 1px solid var(--ana); border-radius: 4px; background: var(--ana); color: #fff; cursor: pointer; font-family: inherit; }
   #arsiv-durum.hata { color: #b00020; }
+  #arsiv #arsiv-kapat { background: none; border: 0; color: var(--soluk); font-size: 15px; padding: 0 4px; margin-left: auto; }
+  #arsiv #arsiv-kapat:hover { color: var(--yazi); }
   table { border-collapse: collapse; width: 100%; }
   th { text-align: left; font-size: 13px; color: var(--soluk); font-weight: 600; padding: 6px 10px; border-bottom: 2px solid var(--cizgi); cursor: pointer; user-select: none; white-space: nowrap; }
   th:hover { color: var(--ana); }
@@ -134,6 +136,7 @@
 </header>
 <div id="arsiv" class="yok"><span id="arsiv-durum">Katalog yükleniyor…</span><span id="yukleme" hidden><span id="yukleme-cubuk"></span></span>
   <button id="arsiv-baglan" hidden>Arşive bağlan</button><button id="arsiv-sec" hidden>Nota arşivini seç (notalar.zip)</button>
+  <button id="arsiv-kes" hidden>Bağlantıyı kes</button><button id="arsiv-kapat" title="Kapat" hidden>✕</button>
   <input type="file" id="arsiv-dosya" accept=".zip" hidden></div>
 <div id="durum"><span id="sayi"></span><span class="bosluk"></span><button id="kayitsiz" class="baglanti"></button></div>
 <table>
@@ -249,8 +252,10 @@ function kaynakDugmeleri(e) {
 const anahtar = e => e.ek || e[10][0] || (e[11] || [])[0] || "";
 // Cevrimici surum: notalar zipten okunmaz; notayi veren sitelere baglanti verilir (window.LINKLER: anahtar -> [[site, url, tur]])
 const CV = !!window.CEVRIMICI, LINK = window.LINKLER || {};
+let cvZip = false;  // cevrimici surumde kullanicinin kendi notalar.zip'i bagli ("offline")
 const cvLink = e => LINK[anahtar(e)] || [];
-const notaVar = e => CV ? cvLink(e).length > 0 || (!!window.CV_ZIP && e[10].some(d => /^st\d/.test(d))) : e[10].length > 0;
+const notaVar = e => CV ? cvLink(e).length > 0 || (!!window.CV_ZIP && e[10].some(d => /^st\d/.test(d))) || (cvZip && e[10].length > 0)
+                         : e[10].length > 0;
 // Notanin kaynaklari (süzgeç kutusunda site site seçim): çevrimiçi sürümde bağlantı verilen siteler + sayfada çizilenler;
 // çevrimdışında notanın zipe nereden geldiği (dosya adının öneki). Notam'ın kendi arşivi "Nota-arsiv".
 const KAYNAK_ADI = { "neyzen.com": "Neyzen.com", "Üsküdar MC": "Üsküdar Musiki Cemiyeti", "CMO": "Corpus Musicae Ottomanicae" };
@@ -265,7 +270,8 @@ function kaynaklari(i) {
   if (CV) {
     cvLink(e).forEach(([site]) => k.add(KAYNAK_ADI[site] || site));
     if (cvYerel(e).length) k.add("SymbTr");
-  } else {
+  }
+  if (!CV || cvZip) {
     e[10].forEach(d => k.add((ONEKLER.find(([r]) => r.test(d)) || [0, "Nota-arsiv"])[1]));
   }
   return (KAY[i] = k);
@@ -625,8 +631,8 @@ function sec(n, gecmis = true) {
     gufteKapat();
     $("detay").innerHTML = '<div class="ust-satir"><span class="baslik">Kaydı olmayan nota: ' + esc(e[10][0]) + '.pdf</span></div>' +
       '<div class="dugme-satir"><span id="dosyalar"></span><span id="arac">' + kaynakDugmeleri(e) +
-      '<button id="kalem-ac">✎ Bilgilerini gir</button>' + pdfDugmeleri + "</span></div>";
-    $("kalem-ac").onclick = () => formAc(n);
+      (CV ? "" : '<button id="kalem-ac">✎ Bilgilerini gir</button>') + pdfDugmeleri + "</span></div>";
+    if (!CV) $("kalem-ac").onclick = () => formAc(n);
     dosyaDugmeleri(e);
     return;
   }
@@ -636,20 +642,25 @@ function sec(n, gecmis = true) {
   const guf = GUFTE[anahtar(e)];
   $("detay").innerHTML = '<div class="ust-satir"><span class="baslik">' + esc(e[1] || "(adsız)") +
     '</span><span class="kunye">' + esc(kunye) + "</span></div>" +
-    '<div class="dugme-satir"><span id="dosyalar"></span><span id="arac">' + (CV ? "" : kaynakDugmeleri(e)) +
+    '<div class="dugme-satir"><span id="dosyalar"></span><span id="arac">' + (CV && !cvZip ? "" : kaynakDugmeleri(e)) +
     (e.ek && !CV ? '<button id="kalem-ac" title="Eser bilgilerini düzenle">✎ Düzenle</button>' : "") +
     (CV && !guf ? "" : '<button id="gufte-ac" title="' + (guf ? "Güfteyi göster/gizle" : "Güfte ekle") + '">' + (guf ? "♪ Güfte" : "♪ Güfte ekle") +
     "</button>") + pdfDugmeleri + "</span></div>";
   gufteKapat();
   if (e.ek && !CV) $("kalem-ac").onclick = () => formAc(n);
   if ($("gufte-ac")) $("gufte-ac").onclick = () => (guf ? ($("gufte-panel").hidden ? gufteGoster(n) : gufteKapat()) : gufteFormu(n));
-  if (CV) return cvGoster(e);
+  if (CV && !(cvZip && e[10].length)) return cvGoster(e);
   if (!e[10].length) {
     mesaj("Bu eser Notam kataloğunda kayıtlı, ancak notası arşivde yok." +
       (e[11] && e[11].length ? "<br><br>Beklenen dosya: <b>" + e[11].map(a => esc(a) + ".tfc").join(", ") + "</b>" : ""));
     return;
   }
   dosyaDugmeleri(e);
+  if (CV) cvLink(e).forEach(([, url], i, l) => {  // zipteki notanin yaninda sitelerin baglantilari
+    const a = document.createElement("a");
+    a.href = url; a.target = "_blank"; a.rel = "noopener"; a.textContent = linkYazisi(l, i);
+    $("dosyalar").appendChild(a);
+  });
 }
 function dosyaAdi(e) {
   const ad = e[0] === "K" ? e[10][0] : [e[1], e[4], e[5]].filter(Boolean).join(" - ");
@@ -966,10 +977,12 @@ async function arsivKur(dosya, tutamac) {
   try {
     ZIP = await zipAc(dosya);
   } catch (e) {
-    arsivDurumu(e.message, true);
+    if (CV) cvSerit("hata", dosya.name);
+    else arsivDurumu(e.message, true);
     return;
   }
   if (tutamac) depo("yaz", tutamac).catch(() => {});
+  if (CV) { cvZip = true; cvSerit("bagli", dosya.name); cvYenile(); return; }
   $("arsiv").classList.remove("yok");
   $("arsiv-sec").hidden = $("arsiv-baglan").hidden = true;
   arsivDurumu("✓ <b>" + esc(dosya.name) + "</b> bağlı · " + ZIP.ic.size.toLocaleString("tr") + " nota");
@@ -984,6 +997,7 @@ $("arsiv-sec").onclick = async () => {
     const [h] = await showOpenFilePicker({ types: [{ description: "Nota arşivi", accept: { "application/zip": [".zip"] } }] });
     await arsivKur(await h.getFile(), h);
   } catch (e) {
+    if (e.name === "SecurityError" && CV) return;  // tiklamasiz acilamadi: seritteki dugme duruyor
     if (e.name !== "AbortError") arsivDurumu(e.message, true);
   }
 };
@@ -993,10 +1007,47 @@ $("arsiv-baglan").onclick = async () => {
     const h = await depo("oku");
     if (await h.requestPermission({ mode: "read" }) === "granted") await arsivKur(await h.getFile(), h);
   } catch (e) {
+    if (CV) { cvSerit("hata", "notalar.zip"); return; }
     $("arsiv-baglan").hidden = true;
     arsivDurumu("Arşiv eski yerinde bulunamadı, lütfen yeniden seçin.", true);
   }
 };
+// ---- Cevrimici surumde kendi notalar.zip'i: Rep. no kutusuna "offline" yazilinca secilir, tarayicida hatirlanir.
+// Zip siteye yuklenmez; her nota icin yalniz o notanin baytlari bilgisayardan okunur (cevrimdisi surumdeki gibi).
+function cvSerit(durum, ad) {
+  const goster = { hatirla: ["arsiv-baglan", "arsiv-kapat"], sec: ["arsiv-sec", "arsiv-kapat"], bagli: ["arsiv-kes"], hata: ["arsiv-sec"] }[durum];
+  $("arsiv").hidden = false;
+  $("arsiv").classList.toggle("yok", durum !== "bagli");
+  ["arsiv-baglan", "arsiv-sec", "arsiv-kes", "arsiv-kapat", "yukleme"].forEach(id => { if ($(id)) $(id).hidden = !goster.includes(id); });
+  if (durum === "hatirla") { arsivDurumu("Notalar çevrimiçi kaynaklardan."); $("arsiv-baglan").textContent = "Arşive bağlan (" + ad + ")"; }
+  if (durum === "sec") { arsivDurumu("Notaları kendi arşivinizden göstermek için <b>notalar.zip</b> dosyasını seçin."); $("arsiv-sec").textContent = "Nota arşivini seç (notalar.zip)"; }
+  if (durum === "bagli") arsivDurumu("✓ Notalar <b>" + esc(ad) + "</b> arşivinden okunur (" + ZIP.ic.size.toLocaleString("tr") + " dosya).");
+  if (durum === "hata") { arsivDurumu(esc(ad) + " açılamadı (taşınmış olabilir).", true); $("arsiv-sec").textContent = "Yeniden seç"; }
+}
+// Zip baglaninca/kesilince: nota sayilari, liste ve acik eser yeniden kurulur
+function cvYenile() {
+  KAY.length = 0;
+  $("kayitsiz").hidden = !cvZip;
+  if (!cvZip) kayitsizMod = false;
+  const i = eserAcik() && secili >= 0 ? sonuc[secili] : -1;
+  notaKutusuKur(); filtrele();
+  const n = sonuc.indexOf(i);
+  if (n >= 0) sec(n, false);
+}
+$("arsiv-kes").onclick = () => {
+  ZIP = null; cvZip = false;
+  depo("yaz", null).catch(() => {});
+  $("arsiv").hidden = true;
+  cvYenile();
+};
+$("arsiv-kapat").onclick = () => { $("arsiv").hidden = true; };
+$("f-6").addEventListener("input", () => {
+  if (!CV || $("f-6").value.trim().toLowerCase().replace(/ı/g, "i") !== "offline") return;
+  $("f-6").value = "";
+  $("f-6").dispatchEvent(new Event("input"));
+  cvSerit("sec");
+  $("arsiv-sec").click();  // yazma bir kullanici hareketi: Windows'un dosya penceresi dogrudan acilir
+});
 if (!CV) (async () => {
   try {
     const h = await depo("oku");
@@ -1233,6 +1284,14 @@ $("basliklar").addEventListener("click", ev => {
 $("temizle").onclick = () => { $("ara").value = ""; document.querySelectorAll("#suzgec input").forEach(s => { s.value = ""; }); $("f-nota").value = CV ? "var" : ""; filtrele(); $("ara").focus(); };
 if (CV) {  // cevrimici: zip yok, kalem/kayit yok; varsayilan olarak yalniz cevrimici notasi olan eserler
   $("arsiv").hidden = true; $("kayitsiz").hidden = true;
+  (async () => {  // bu tarayicida daha once zip secildiyse: "Arsive baglan" seridi (izin varsa dogrudan baglanir)
+    try {
+      const h = await depo("oku");
+      if (!h) return;
+      if (await h.queryPermission({ mode: "read" }) === "granted") return await arsivKur(await h.getFile(), h);
+      cvSerit("hatirla", h.name);
+    } catch (e) { /* hatirlanan arsiv yok */ }
+  })();
   $("f-nota").title = "Çevrimiçi notası olan / olmayan eserler";
   document.title += " (çevrimiçi)";
 }
