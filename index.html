@@ -1231,6 +1231,7 @@ async function ac(ad, dugme) {
 const HARITA_ALAN = { S: [[4, "Makam"], [5, "Form"], [6, "Usul"]], H: [[7, "Yöre"], [6, "Usul"]] };
 const HARITA_RENK = [210, 0, 120, 50, 280, 175, 25, 330, 90, 240, 150, 300, 60, 195, 15, 260];
 let harita = { ust: null, ic: null };
+const HARITA_ESIK = 50;  // bundan az eserli degerler tek kutuda toplanir
 function kareyeYakin(ogeler, x, y, w, h) {  // ogeler: [{v}] buyukten kucuge; her ogeye x, y, w, h yazar
   const toplam = ogeler.reduce((t, o) => t + o.v, 0);
   if (!toplam || w <= 0 || h <= 0) return;
@@ -1275,8 +1276,16 @@ function haritaCiz() {
   const p = $("harita"), alan = $("harita-alan");
   const tur = aktifTur, ust = harita.ust, ic = harita.ic;
   const adi = a => (HARITA_ALAN[tur].find(x => x[0] === a) || [, ""])[1];
-  const veri = haritaVerisi(tur, ust, ic);
+  let veri = haritaVerisi(tur, ust, ic);
   const toplam = veri.reduce((t, k) => t + k.v, 0);
+  // 50'den az eserli degerler tek kutuda toplanir; o kutu kendi icinde bu degerlere bolunur
+  const az = veri.filter(k => k.v < HARITA_ESIK);
+  if (az.length > 1) {
+    veri = veri.filter(k => k.v >= HARITA_ESIK);
+    veri.push({ ad: HARITA_ESIK + "'den az eserli " + az.length.toLocaleString("tr") + " " + adi(ust).toLocaleLowerCase("tr"),
+                v: az.reduce((t, k) => t + k.v, 0), grup: true, alt: new Map(az.map(k => [k.ad, k.v])) });
+    veri.sort((a, b) => b.v - a.v);
+  }
   const W = alan.clientWidth, H = alan.clientHeight;
   kareyeYakin(veri, 0, 0, W, H);
   const yuzde = n => (100 * n / toplam).toLocaleString("tr", { maximumFractionDigits: 1 });
@@ -1284,18 +1293,19 @@ function haritaCiz() {
   veri.forEach((k, i) => {
     if (k.w < 1 || k.h < 1) return;
     const ton = HARITA_RENK[i % HARITA_RENK.length], ipucu = adi(ust) + ": " + k.ad + " — " + k.v.toLocaleString("tr") + " eser (%" + yuzde(k.v) + ")";
-    parca.push('<div class="hk" style="left:' + k.x + "px;top:" + k.y + "px;width:" + k.w + "px;height:" + k.h + 'px" data-u="' + esc(k.ad) + '" title="' + esc(ipucu) + '">');
+    parca.push('<div class="hk" style="left:' + k.x + "px;top:" + k.y + "px;width:" + k.w + "px;height:" + k.h + 'px" data-u="' + esc(k.ad) + '"' + (k.grup ? ' data-grup="1"' : "") + ' title="' + esc(ipucu) + '">');
     const bas = k.w > 60 && k.h > 18 ? 16 : 0;  // ust kutunun adi icin serit
     if (bas) parca.push('<span class="hb">' + esc(k.ad) + " · " + k.v.toLocaleString("tr") + "</span>");
     const alt = [...k.alt].map(([ad, v]) => ({ ad, v })).sort((a, b) => b.v - a.v);
-    if (ic != null && alt.length && k.w > 6 && k.h - bas > 6) {
+    if ((ic != null || k.grup) && alt.length && k.w > 6 && k.h - bas > 6) {
+      const icAdi = k.grup ? adi(ust) : adi(ic), nitelik = k.grup ? "data-g" : "data-i";
       kareyeYakin(alt, 1, bas + 1, k.w - 2, k.h - bas - 2);
       alt.forEach((a, j) => {
         if (a.w < 1 || a.h < 1) return;
         const isik = 62 - (j % 5) * 6;
         parca.push('<div class="hi" style="left:' + a.x + "px;top:" + a.y + "px;width:" + a.w + "px;height:" + a.h + "px;background:" +
-          "radial-gradient(ellipse at 45% 40%, hsl(" + ton + ",70%," + Math.min(92, isik + 28) + "%), hsl(" + ton + ",62%," + isik + "%) 55%, hsl(" + ton + ",60%," + (isik - 22) + '%))" data-i="' +
-          esc(a.ad) + '" title="' + esc(ipucu + "\n" + adi(ic) + ": " + a.ad + " — " + a.v.toLocaleString("tr") + " eser (%" + yuzde(a.v) + " tüm arşivin)") + '">' +
+          "radial-gradient(ellipse at 45% 40%, hsl(" + ton + ",70%," + Math.min(92, isik + 28) + "%), hsl(" + ton + ",62%," + isik + "%) 55%, hsl(" + ton + ",60%," + (isik - 22) + '%))" ' + nitelik + '="' +
+          esc(a.ad) + '" title="' + esc((k.grup ? "" : ipucu + "\n") + icAdi + ": " + a.ad + " — " + a.v.toLocaleString("tr") + " eser (%" + yuzde(a.v) + " tüm arşivin)") + '">' +
           (a.w > 70 && a.h > 16 ? "<span>" + esc(a.ad) + " " + a.v.toLocaleString("tr") + "</span>" : "") + "</div>");
       });
     } else parca.push('<div class="hi" style="left:1px;top:' + (bas + 1) + "px;width:" + Math.max(0, k.w - 2) + "px;height:" + Math.max(0, k.h - bas - 2) +
@@ -1342,6 +1352,9 @@ function haritaAc() {
     $("harita-alan").addEventListener("click", ev => {
       const hk = ev.target.closest(".hk");
       if (!hk) return;
+      const g = ev.target.closest(".hi[data-g]");
+      if (g) return haritaSuz({ [harita.ust]: g.dataset.g });  // az eserliler kutusunda tek deger
+      if (hk.dataset.grup) return;
       const hi = ev.target.closest(".hi[data-i]"), d = { [harita.ust]: hk.dataset.u };
       if (hi && harita.ic != null && hi.dataset.i !== "(boş)") d[harita.ic] = hi.dataset.i;
       haritaSuz(d);
