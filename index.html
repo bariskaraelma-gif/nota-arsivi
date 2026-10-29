@@ -33,7 +33,7 @@
   #suzgec input:disabled { opacity: .45; }
   #f-nota { font: inherit; font-size: 13px; padding: 8px 2px; border: 0; border-radius: 6px; max-width: 160px; color: var(--yazi); }
   #f-nota.dolu { background: var(--sari); }
-  #temizle { padding: 8px 12px; border: 0; border-radius: 6px; background: #fff3; color: #fff; cursor: pointer; font: inherit; font-size: 14px; white-space: nowrap; }
+  #temizle, #harita-ac { padding: 8px 12px; border: 0; border-radius: 6px; background: #fff3; color: #fff; cursor: pointer; font: inherit; font-size: 14px; white-space: nowrap; }
   @media (max-width: 1000px) { .ara { flex-wrap: wrap; } #ara { flex-basis: 100%; order: 9; } }
   #durum { display: flex; gap: 16px; align-items: baseline; padding: 8px 16px; color: var(--soluk); font-size: 14px; }
   #sayi a, .baglanti { font-size: 13px; background: none; border: none; padding: 0; color: var(--ana); cursor: pointer; text-decoration: underline; font-family: inherit; }
@@ -142,6 +142,7 @@
     </div>
     <select id="f-nota" title="Notası olan / olmayan eserler"><option value="">Notalı + notasız</option><option value="var">Yalnız notası olanlar</option><option value="yok">Yalnız notası olmayanlar</option></select>
     <button id="temizle" title="Aramayı ve süzgeçleri temizle">Temizle</button>
+    <button id="harita-ac" title="Dağılım haritası: makam, form, usul kutuları">▦</button>
   </div>
 </header>
 <div id="arsiv" class="yok"><span id="arsiv-durum">Katalog yükleniyor…</span><span id="yukleme" hidden><span id="yukleme-cubuk"></span></span>
@@ -1223,6 +1224,146 @@ async function ac(ad, dugme) {
     if (no === istekNo) mesaj(esc(e.message));
   }
 }
+
+// ---- Dagilim haritasi (WinDirStat gibi kutu haritasi): tum arsivde makam / form / usul dagilimi.
+// Kutunun alani eser sayisiyla orantili; her kutu ikinci bir alana gore yeniden bolunur (makam -> form gibi).
+// Kutuya tiklayinca liste o degerlere suzulur. Yerlesim "squarified" (Bruls, Huizing, van Wijk) algoritmasi.
+const HARITA_ALAN = { S: [[4, "Makam"], [5, "Form"], [6, "Usul"]], H: [[7, "Yöre"], [6, "Usul"]] };
+const HARITA_RENK = [210, 0, 120, 50, 280, 175, 25, 330, 90, 240, 150, 300, 60, 195, 15, 260];
+let harita = { ust: null, ic: null };
+function kareyeYakin(ogeler, x, y, w, h) {  // ogeler: [{v}] buyukten kucuge; her ogeye x, y, w, h yazar
+  const toplam = ogeler.reduce((t, o) => t + o.v, 0);
+  if (!toplam || w <= 0 || h <= 0) return;
+  const olcek = (w * h) / toplam;
+  let kalan = ogeler.map(o => ({ o, a: o.v * olcek }));
+  while (kalan.length) {
+    const kisa = Math.min(w, h);
+    let satir = [], en = Infinity;
+    for (const k of kalan) {
+      const s = satir.concat(k), t = s.reduce((a, b) => a + b.a, 0);
+      const enk = Math.min(...s.map(b => b.a)), enb = Math.max(...s.map(b => b.a));
+      const kotu = Math.max((kisa * kisa * enb) / (t * t), (t * t) / (kisa * kisa * enk));
+      if (kotu > en) break;
+      satir = s; en = kotu;
+    }
+    const t = satir.reduce((a, b) => a + b.a, 0), kalin = t / kisa;
+    let p = 0;
+    for (const b of satir) {
+      const uz = b.a / kalin;
+      if (w >= h) Object.assign(b.o, { x, y: y + p, w: kalin, h: uz });
+      else Object.assign(b.o, { x: x + p, y, w: uz, h: kalin });
+      p += uz;
+    }
+    if (w >= h) { x += kalin; w -= kalin; } else { y += kalin; h -= kalin; }
+    kalan = kalan.slice(satir.length);
+  }
+}
+function haritaVerisi(tur, ust, ic) {
+  const kok = new Map();
+  for (const e of E) {
+    if (e[0] !== tur || !e[ust]) continue;
+    for (const d of alanDegerleri(e, ust)) {
+      let k = kok.get(d);
+      if (!k) kok.set(d, k = { ad: d, v: 0, alt: new Map() });
+      k.v++;
+      if (ic != null) for (const a of (e[ic] ? alanDegerleri(e, ic) : ["(boş)"])) k.alt.set(a, (k.alt.get(a) || 0) + 1);
+    }
+  }
+  return [...kok.values()].sort((a, b) => b.v - a.v);
+}
+function haritaCiz() {
+  const p = $("harita"), alan = $("harita-alan");
+  const tur = aktifTur, ust = harita.ust, ic = harita.ic;
+  const adi = a => (HARITA_ALAN[tur].find(x => x[0] === a) || [, ""])[1];
+  const veri = haritaVerisi(tur, ust, ic);
+  const toplam = veri.reduce((t, k) => t + k.v, 0);
+  const W = alan.clientWidth, H = alan.clientHeight;
+  kareyeYakin(veri, 0, 0, W, H);
+  const yuzde = n => (100 * n / toplam).toLocaleString("tr", { maximumFractionDigits: 1 });
+  const parca = [];
+  veri.forEach((k, i) => {
+    if (k.w < 1 || k.h < 1) return;
+    const ton = HARITA_RENK[i % HARITA_RENK.length], ipucu = adi(ust) + ": " + k.ad + " — " + k.v.toLocaleString("tr") + " eser (%" + yuzde(k.v) + ")";
+    parca.push('<div class="hk" style="left:' + k.x + "px;top:" + k.y + "px;width:" + k.w + "px;height:" + k.h + 'px" data-u="' + esc(k.ad) + '" title="' + esc(ipucu) + '">');
+    const bas = k.w > 60 && k.h > 18 ? 16 : 0;  // ust kutunun adi icin serit
+    if (bas) parca.push('<span class="hb">' + esc(k.ad) + " · " + k.v.toLocaleString("tr") + "</span>");
+    const alt = [...k.alt].map(([ad, v]) => ({ ad, v })).sort((a, b) => b.v - a.v);
+    if (ic != null && alt.length && k.w > 6 && k.h - bas > 6) {
+      kareyeYakin(alt, 1, bas + 1, k.w - 2, k.h - bas - 2);
+      alt.forEach((a, j) => {
+        if (a.w < 1 || a.h < 1) return;
+        const isik = 62 - (j % 5) * 6;
+        parca.push('<div class="hi" style="left:' + a.x + "px;top:" + a.y + "px;width:" + a.w + "px;height:" + a.h + "px;background:" +
+          "radial-gradient(ellipse at 45% 40%, hsl(" + ton + ",70%," + Math.min(92, isik + 28) + "%), hsl(" + ton + ",62%," + isik + "%) 55%, hsl(" + ton + ",60%," + (isik - 22) + '%))" data-i="' +
+          esc(a.ad) + '" title="' + esc(ipucu + "\n" + adi(ic) + ": " + a.ad + " — " + a.v.toLocaleString("tr") + " eser (%" + yuzde(a.v) + " tüm arşivin)") + '">' +
+          (a.w > 70 && a.h > 16 ? "<span>" + esc(a.ad) + " " + a.v.toLocaleString("tr") + "</span>" : "") + "</div>");
+      });
+    } else parca.push('<div class="hi" style="left:1px;top:' + (bas + 1) + "px;width:" + Math.max(0, k.w - 2) + "px;height:" + Math.max(0, k.h - bas - 2) +
+      "px;background:radial-gradient(ellipse at 45% 40%, hsl(" + ton + ",70%,85%), hsl(" + ton + ",62%,58%) 55%, hsl(" + ton + ',60%,36%))"></div>');
+    parca.push("</div>");
+  });
+  alan.innerHTML = parca.join("");
+  $("harita-bilgi").textContent = (tur === "S" ? "TSM" : "THM") + " · tüm arşiv · " + toplam.toLocaleString("tr") + " eser · " +
+    veri.length.toLocaleString("tr") + " " + adi(ust).toLocaleLowerCase("tr") + (ic != null ? " (içinde " + adi(ic).toLocaleLowerCase("tr") + ")" : "");
+}
+function haritaSuz(degerler) {  // {alan: deger}: arama ve suzgecler temizlenir, bu degerler yazilir
+  $("ara").value = "";
+  suzgecler.forEach(s => { s.el.value = degerler[s.alan] || ""; s.dolu = null; listeDoldur(s); });
+  $("harita").hidden = true;
+  if (eserAcik()) listeyiGoster();
+  filtrele();
+}
+function haritaAc() {
+  let p = $("harita");
+  if (!p) {
+    const st = document.createElement("style");
+    st.textContent = "#harita{position:fixed;inset:2%;z-index:50;background:#fff;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.4);display:flex;flex-direction:column}" +
+      "#harita .ust{display:flex;gap:6px;align-items:center;padding:8px 12px;background:var(--ana);color:#fff;border-radius:8px 8px 0 0;flex-wrap:wrap;font-size:14px}" +
+      "#harita .ust button,#harita .ust select{border:0;border-radius:5px;padding:6px 10px;cursor:pointer;background:#fff3;color:#fff;font:inherit}" +
+      "#harita .ust select option{color:#000}#harita .ust button.aktif{background:#fff;color:var(--ana);font-weight:700}" +
+      "#harita .ust .bilgi{opacity:.85;margin-left:8px}#harita .ust .kapat{margin-left:auto}" +
+      "#harita-alan{position:relative;flex:1;margin:6px;overflow:hidden;background:#222}" +
+      "#harita .hk{position:absolute;box-sizing:border-box;border:1px solid #111;background:#333;cursor:pointer;overflow:hidden}" +
+      "#harita .hb{position:absolute;left:3px;top:1px;right:3px;font:600 12px 'Segoe UI',sans-serif;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}" +
+      "#harita .hi{position:absolute;box-sizing:border-box;border:1px solid rgba(0,0,0,.35);overflow:hidden}" +
+      "#harita .hi span{position:absolute;left:3px;top:1px;right:2px;font:11px 'Segoe UI',sans-serif;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 0 3px #fff8}" +
+      "#harita .hk:hover{outline:2px solid #fff;z-index:2}#harita .hi:hover{outline:2px solid #ff0;z-index:3}";
+    document.head.appendChild(st);
+    p = document.createElement("div");
+    p.id = "harita"; p.hidden = true;
+    p.innerHTML = '<div class="ust"><b>Dağılım haritası</b><span id="harita-sekme"></span>' +
+      '<label>İçinde: <select id="harita-ic"></select></label><span class="bilgi" id="harita-bilgi"></span>' +
+      '<button class="kapat" title="Kapat (Esc)">✕</button></div><div id="harita-alan"></div>';
+    document.body.appendChild(p);
+    p.querySelector(".kapat").onclick = () => { p.hidden = true; };
+    $("harita-ic").onchange = () => { harita.ic = $("harita-ic").value === "" ? null : +$("harita-ic").value; haritaCiz(); };
+    document.addEventListener("keydown", ev => { if (ev.key === "Escape" && !p.hidden) p.hidden = true; });
+    window.addEventListener("resize", () => { if (!p.hidden) haritaCiz(); });
+    $("harita-alan").addEventListener("click", ev => {
+      const hk = ev.target.closest(".hk");
+      if (!hk) return;
+      const hi = ev.target.closest(".hi[data-i]"), d = { [harita.ust]: hk.dataset.u };
+      if (hi && harita.ic != null && hi.dataset.i !== "(boş)") d[harita.ic] = hi.dataset.i;
+      haritaSuz(d);
+    });
+  }
+  const alanlar = HARITA_ALAN[aktifTur];
+  if (!alanlar.some(a => a[0] === harita.ust)) { harita.ust = alanlar[0][0]; harita.ic = alanlar[1][0]; }
+  const sekmeKur = () => {
+    $("harita-sekme").innerHTML = alanlar.map(([a, ad]) => '<button data-a="' + a + '"' + (a === harita.ust ? ' class="aktif"' : "") + ">" + ad + "</button>").join(" ");
+    $("harita-sekme").querySelectorAll("button").forEach(b => b.onclick = () => {
+      harita.ust = +b.dataset.a;
+      if (harita.ic === harita.ust) harita.ic = alanlar.find(a => a[0] !== harita.ust)[0];
+      sekmeKur(); haritaCiz();
+    });
+    $("harita-ic").innerHTML = '<option value="">— bölme yok —</option>' + alanlar.filter(a => a[0] !== harita.ust)
+      .map(([a, ad]) => '<option value="' + a + '"' + (a === harita.ic ? " selected" : "") + ">" + ad + "</option>").join("");
+  };
+  sekmeKur();
+  p.hidden = false;
+  haritaCiz();
+}
+$("harita-ac").onclick = haritaAc;
 
 // ---- Kalem: kaydi olmayan notaya bilgi girme; bilgiler bu sayfanin icine yazilir ----
 const FORM_ALANLARI = {
