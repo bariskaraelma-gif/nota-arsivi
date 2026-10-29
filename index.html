@@ -33,7 +33,7 @@
   #suzgec input:disabled { opacity: .45; }
   #f-nota { font: inherit; font-size: 13px; padding: 8px 2px; border: 0; border-radius: 6px; max-width: 160px; color: var(--yazi); }
   #f-nota.dolu { background: var(--sari); }
-  #temizle, #harita-ac { padding: 8px 12px; border: 0; border-radius: 6px; background: #fff3; color: #fff; cursor: pointer; font: inherit; font-size: 14px; white-space: nowrap; }
+  #temizle, #harita-ac, #formlar-ac { padding: 8px 12px; border: 0; border-radius: 6px; background: #fff3; color: #fff; cursor: pointer; font: inherit; font-size: 14px; white-space: nowrap; }
   @media (max-width: 1000px) { .ara { flex-wrap: wrap; } #ara { flex-basis: 100%; order: 9; } }
   #durum { display: flex; gap: 16px; align-items: baseline; padding: 8px 16px; color: var(--soluk); font-size: 14px; }
   #sayi a, .baglanti { font-size: 13px; background: none; border: none; padding: 0; color: var(--ana); cursor: pointer; text-decoration: underline; font-family: inherit; }
@@ -75,6 +75,8 @@
   .ust-satir { flex: 1 1 320px; min-width: 0; line-height: 1.35; }
   .ust-satir .baslik { display: block; font-size: 18px; font-weight: 600; }
   .ust-satir .kunye { display: block; font-size: 13.5px; opacity: .85; }
+  .fb-ac { border: 0; border-radius: 4px; background: #fff3; color: #fff; cursor: pointer; font-size: 12px; padding: 0 4px; line-height: 1.5; }
+  .fb-ac:hover { background: var(--sari); }
   .dugme-satir, #dosyalar, #arac { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .cv-kaynak { font-size: 11px; opacity: .8; max-width: 260px; }
   #bos { padding: 50px 20px; color: var(--soluk); font-size: 15px; text-align: center; line-height: 1.6; }
@@ -143,6 +145,7 @@
     <select id="f-nota" title="Notası olan / olmayan eserler"><option value="">Notalı + notasız</option><option value="var">Yalnız notası olanlar</option><option value="yok">Yalnız notası olmayanlar</option></select>
     <button id="temizle" title="Aramayı ve süzgeçleri temizle">Temizle</button>
     <button id="harita-ac" title="Dağılım haritası: makam, form, usul kutuları">▦</button>
+    <button id="formlar-ac" title="Beste formları (M. Nazmi Özalp, Türk Mûsikîsi Beste Formları)" hidden>📖</button>
   </div>
 </header>
 <div id="arsiv" class="yok"><span id="arsiv-durum">Katalog yükleniyor…</span><span id="yukleme" hidden><span id="yukleme-cubuk"></span></span>
@@ -169,12 +172,12 @@
 <script>
 (function () {
   var durum = document.getElementById("arsiv-durum"), kutu = document.getElementById("yukleme"),
-      cubuk = document.getElementById("yukleme-cubuk"), BOY = 24435091;
+      cubuk = document.getElementById("yukleme-cubuk"), BOY = 24501301;
   kutu.hidden = false;
   function yaz(y) { durum.textContent = "Katalog yükleniyor… %" + y; cubuk.style.width = y + "%"; }
   function calistir(metin) { var s = document.createElement("script"); s.textContent = metin; document.body.appendChild(s); }
   yaz(0);
-  fetch("veri.f0a001adc9.js").then(async function (r) {
+  fetch("veri.4ce8675314.js").then(async function (r) {
     if (!r.ok) throw new Error("HTTP " + r.status);
     var okur = r.body.getReader(), parcalar = [], n = 0;
     for (;;) {
@@ -261,6 +264,16 @@ function eklenmisKayit(dosyalar, k) {
 }
 E.forEach((e, i) => { if (e[0] === "K" && EKLER[e[10][0]]) E[i] = eklenmisKayit(e[10], EKLER[e[10][0]]); });
 for (let i = E.length - 1; i >= 0; i--) if (E[i].sil) E.splice(i, 1);  // form karariyla silinenler
+// Form bilgileri (yayin\FORMLAR.md -> form_bilgi.py; Özalp, Türk Mûsikîsi Beste Formları): form adi -> aciklama.
+// Eser bilgisinde form adinin yaninda 📖; ust cubuktaki 📖 butun formlari acar. Eslesme sapkasiz, noktalamasiz ad ile.
+const FORM_BILGI = window.FORM_BILGI || null;
+const formAnahtar = f => sade(f.replace(/\(.*?\)/g, " ")).replace(/[^a-z0-9]+/g, "");
+const FORM_ESLE = new Map();
+if (FORM_BILGI) FORM_BILGI.formlar.forEach((f, i) => [f.ad, ...f.adlar].forEach(a => {
+  const k = formAnahtar(a);
+  if (k && !FORM_ESLE.has(k)) FORM_ESLE.set(k, i);
+}));
+const formBilgisi = ad => (FORM_BILGI && ad && FORM_BILGI.formlar[FORM_ESLE.get(formAnahtar(ad))]) || null;
 // Kaydi olmayan nota hangi turde listelenir: 2546, o0123, u0045 -> THM; hicaz0123 -> TSM
 const grup = e => e[0] !== "K" ? e[0] : (/^[ou]?\d/.test(e[10][0]) ? "H" : "S");
 
@@ -689,15 +702,19 @@ function sec(n, gecmis = true) {
   }
   const kunye = (e[0] === "H" && !e.fk  // TSM'den tasinan kayitta TSM alanlari (besteci, soz, makam) kalir
     ? [e[7], e[6], e[2] && "Kaynak: " + e[2], e[3] && "Derleyen: " + e[3], e[8] && "Notaya alan: " + e[8], e[9] && "Rep. " + e[9]]
-    : [e[4], e[5], e[6], e[2] && "Besteci: " + e[2], e[3] && "Söz: " + e[3], e[9] && "Rep. " + e[9]]).filter(Boolean).join(" · ");
+    : [e[4], e[5], e[6], e[2] && "Besteci: " + e[2], e[3] && "Söz: " + e[3], e[9] && "Rep. " + e[9]]).filter(Boolean);
+  const fb = e[0] === "S" || e.fk ? formBilgisi(e[5]) : null;
+  const kunyeHtml = kunye.map((x, j) => esc(x) + (fb && j === kunye.indexOf(e[5]) ?
+    ' <button class="fb-ac" title="Form bilgisi: ' + esc(fb.ad) + ' (Özalp, Türk Mûsikîsi Beste Formları)">📖</button>' : "")).join(" · ");
   const guf = GUFTE[anahtar(e)];
   $("detay").innerHTML = '<div class="ust-satir"><span class="baslik">' + esc(e[1] || "(adsız)") +
-    '</span><span class="kunye">' + esc(kunye) + "</span></div>" +
+    '</span><span class="kunye">' + kunyeHtml + "</span></div>" +
     '<div class="dugme-satir"><span id="dosyalar"></span><span id="arac">' + (CV && !cvZip ? "" : kaynakDugmeleri(e)) +
     (e.ek && !CV ? '<button id="kalem-ac" title="Eser bilgilerini düzenle">✎ Düzenle</button>' : "") +
     (CV && !guf ? "" : '<button id="gufte-ac" title="' + (guf ? "Güfteyi göster/gizle" : "Güfte ekle") + '">' + (guf ? "♪ Güfte" : "♪ Güfte ekle") +
     "</button>") + pdfDugmeleri + "</span></div>";
   gufteKapat();
+  if (fb) $("detay").querySelector(".fb-ac").onclick = () => formlarAc(fb);
   if (e.ek && !CV) $("kalem-ac").onclick = () => formAc(n);
   if ($("gufte-ac")) $("gufte-ac").onclick = () => (guf ? ($("gufte-panel").hidden ? gufteGoster(n) : gufteKapat()) : gufteFormu(n));
   if (CV && !(cvZip && e[10].length)) return cvGoster(e);
@@ -1138,6 +1155,12 @@ function is1Ac() {
     ["f", "Form adı değişenler", liste.f.length, "TSM'de kaldı, form adı birleştirildi ya da düzeltildi. Gruba tıklayınca eserler açılır."],
     ["b", "Karar bekleyenler", liste.b.length, "Henüz bir şey yapılmadı; formlar.xlsx'te karar bekliyor."],
   ];
+  // Kitapta (FORMLAR.md) karsiligi olmayan TSM formlari: eser bilgisinde 📖 cikmaz
+  const kitapsiz = new Map();
+  if (FORM_BILGI) E.forEach(e => { if (e[0] === "S" && e[5] && !formBilgisi(e[5])) kitapsiz.set(e[5], (kitapsiz.get(e[5]) || 0) + 1); });
+  if (FORM_BILGI) sekmeler.push(["k", "Kitapta karşılığı yok", kitapsiz.size,
+    "Bu TSM formları Özalp'in kitabında (FORMLAR.md) yok; eser bilgisinde 📖 çıkmaz. Bağlamak için FORMLAR.md'de ilgili formun " +
+    "\"- Arşivde:\" satırına eklenir. Satıra tıklayınca o formdaki eserler listelenir."]);
   const satir = i => {
     const e = E[i];
     return '<tr class="ac" data-i="' + i + '"><td>' + esc(e[1] || "(adsız)") + "</td><td>" + esc(e[2] || "") + "</td><td>" + esc(e[4] || "") +
@@ -1168,6 +1191,16 @@ function is1Ac() {
         ic.innerHTML = '<td colspan="2"><table>' + baslik + gruplar[tr.dataset.g].map(satir).join("") + "</table></td>";
         tr.after(ic);
         baglan(ic);
+      });
+      return;
+    } else if (t === "k") {
+      h += "<tr><th>Form</th><th>Eser</th></tr>" + [...kitapsiz].sort((a, b) => b[1] - a[1]).map(([f, n]) =>
+        '<tr class="ac" data-form="' + esc(f) + '"><td>' + esc(f) + "</td><td>" + n.toLocaleString("tr") + "</td></tr>").join("");
+      p.querySelector(".govde").innerHTML = h + "</table>";
+      p.querySelectorAll("tr[data-form]").forEach(tr => tr.onclick = () => {
+        p.hidden = true;
+        if (aktifTur !== "S") turSec("S");
+        haritaSuz({ 5: tr.dataset.form });
       });
       return;
     } else h += baslik + liste[t].map(satir).join("");
@@ -1289,10 +1322,11 @@ function haritaCiz() {
   const W = alan.clientWidth, H = alan.clientHeight;
   kareyeYakin(veri, 0, 0, W, H);
   const yuzde = n => (100 * n / toplam).toLocaleString("tr", { maximumFractionDigits: 1 });
+  const fIpucu = (alan, ad) => { const f = alan === 5 && formBilgisi(ad); return f && f.ipucu ? "\n📖 " + f.ipucu : ""; };
   const parca = [];
   veri.forEach((k, i) => {
     if (k.w < 1 || k.h < 1) return;
-    const ton = HARITA_RENK[i % HARITA_RENK.length], ipucu = adi(ust) + ": " + k.ad + " — " + k.v.toLocaleString("tr") + " eser (%" + yuzde(k.v) + ")";
+    const ton = HARITA_RENK[i % HARITA_RENK.length], ipucu = adi(ust) + ": " + k.ad + " — " + k.v.toLocaleString("tr") + " eser (%" + yuzde(k.v) + ")" + fIpucu(ust, k.ad);
     parca.push('<div class="hk" style="left:' + k.x + "px;top:" + k.y + "px;width:" + k.w + "px;height:" + k.h + 'px" data-u="' + esc(k.ad) + '"' + (k.grup ? ' data-grup="1"' : "") + ' title="' + esc(ipucu) + '">');
     const bas = k.w > 60 && k.h > 18 ? 16 : 0;  // ust kutunun adi icin serit
     if (bas) parca.push('<span class="hb">' + esc(k.ad) + " · " + k.v.toLocaleString("tr") + "</span>");
@@ -1305,7 +1339,7 @@ function haritaCiz() {
         const isik = 62 - (j % 5) * 6;
         parca.push('<div class="hi" style="left:' + a.x + "px;top:" + a.y + "px;width:" + a.w + "px;height:" + a.h + "px;background:" +
           "radial-gradient(ellipse at 45% 40%, hsl(" + ton + ",70%," + Math.min(92, isik + 28) + "%), hsl(" + ton + ",62%," + isik + "%) 55%, hsl(" + ton + ",60%," + (isik - 22) + '%))" ' + nitelik + '="' +
-          esc(a.ad) + '" title="' + esc((k.grup ? "" : ipucu + "\n") + icAdi + ": " + a.ad + " — " + a.v.toLocaleString("tr") + " eser (%" + yuzde(a.v) + " tüm arşivin)") + '">' +
+          esc(a.ad) + '" title="' + esc((k.grup ? "" : ipucu + "\n") + icAdi + ": " + a.ad + " — " + a.v.toLocaleString("tr") + " eser (%" + yuzde(a.v) + " tüm arşivin)" + fIpucu(k.grup ? ust : ic, a.ad)) + '">' +
           (a.w > 70 && a.h > 16 ? "<span>" + esc(a.ad) + " " + a.v.toLocaleString("tr") + "</span>" : "") + "</div>");
       });
     } else parca.push('<div class="hi" style="left:1px;top:' + (bas + 1) + "px;width:" + Math.max(0, k.w - 2) + "px;height:" + Math.max(0, k.h - bas - 2) +
@@ -1319,7 +1353,7 @@ function haritaCiz() {
 function haritaSuz(degerler) {  // {alan: deger}: arama ve suzgecler temizlenir, bu degerler yazilir
   $("ara").value = "";
   suzgecler.forEach(s => { s.el.value = degerler[s.alan] || ""; s.dolu = null; listeDoldur(s); });
-  $("harita").hidden = true;
+  if ($("harita")) $("harita").hidden = true;
   if (eserAcik()) listeyiGoster();
   filtrele();
 }
@@ -1377,6 +1411,102 @@ function haritaAc() {
   haritaCiz();
 }
 $("harita-ac").onclick = haritaAc;
+
+// ---- Beste formlari: solda bolum bolum formlar (TSM'deki eser sayisiyla), sagda secilen formun aciklamasi.
+// Kaynak yayin\FORMLAR.md (GitHub'da da gorunur). Cevrimdisi surumde kitabin PDF'ine sayfasindan baglanti verilir.
+const FORMLAR_GITHUB = "https://github.com/bariskaraelma-gif/nota-arsivi/blob/main/FORMLAR.md";
+function formSayilari() {  // bilgi sirasi -> Map(arsivdeki form adi -> eser sayisi); form suzgeci yalniz TSM'de
+  const say = new Map();
+  for (const e of E) {
+    if (e[0] !== "S" || !e[5]) continue;
+    const i = FORM_ESLE.get(formAnahtar(e[5]));
+    if (i == null) continue;
+    if (!say.has(i)) say.set(i, new Map());
+    say.get(i).set(e[5], (say.get(i).get(e[5]) || 0) + 1);
+  }
+  return say;
+}
+function formuListele(ad) {
+  $("fbil").hidden = true;
+  if (aktifTur !== "S") turSec("S");
+  haritaSuz({ 5: ad });
+}
+function formlarAc(secilen) {
+  if (!FORM_BILGI) return;
+  const FB = FORM_BILGI, say = formSayilari();
+  let p = $("fbil");
+  if (!p) {
+    const st = document.createElement("style");
+    st.textContent = "#fbil{position:fixed;inset:4% 6%;z-index:50;background:#fffdf8;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.4);display:flex;flex-direction:column;font-size:14.5px}" +
+      "#fbil .ust{display:flex;gap:10px;align-items:center;padding:9px 14px;background:var(--ana);color:#fff;border-radius:8px 8px 0 0}" +
+      "#fbil .ust .bilgi{opacity:.85;font-size:13px}#fbil .ust .kapat{margin-left:auto;border:0;border-radius:5px;padding:5px 10px;cursor:pointer;background:#fff3;color:#fff;font:inherit}" +
+      "#fbil .ic{display:flex;flex:1;min-height:0}#fbil nav{width:240px;flex:none;overflow:auto;border-right:1px solid var(--cizgi);padding:6px 0 12px;font-size:13.5px}" +
+      "#fbil nav .bb{font-weight:700;color:var(--ana);padding:9px 12px 2px;cursor:pointer}#fbil nav a{display:flex;gap:6px;justify-content:space-between;padding:2px 12px 2px 22px;cursor:pointer;color:inherit;text-decoration:none}" +
+      "#fbil nav a:hover,#fbil nav .bb:hover{background:var(--acik)}#fbil nav .aktif{background:var(--sari);font-weight:600}#fbil nav small{color:var(--soluk);font-weight:400}" +
+      "#fbil article{flex:1;overflow:auto;padding:16px 28px 24px;line-height:1.6}#fbil article p{max-width:820px;margin:0 0 10px}" +
+      "#fbil h2{margin:0;color:var(--ana);font-size:22px}#fbil .bol{color:var(--soluk);font-size:13px;margin-bottom:12px}" +
+      "#fbil blockquote{max-width:800px;margin:10px 0;padding:6px 14px;border-left:3px solid var(--ana);background:var(--acik);font-style:italic}" +
+      "#fbil .meta{margin:14px 0 6px;font-size:13.5px}#fbil .meta a{color:var(--ana)}#fbil .arsiv{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}" +
+      "#fbil .arsiv button{border:1px solid var(--ana);border-radius:5px;background:#fff;color:var(--ana);padding:4px 10px;cursor:pointer;font:inherit;font-size:13.5px}" +
+      "#fbil .arsiv button:hover{background:var(--sari)}#fbil .kaynak{margin-top:22px;padding-top:8px;border-top:1px solid var(--cizgi);font-size:12px;color:var(--soluk);max-width:820px}" +
+      "#fbil .kaynak a{color:var(--soluk)}@media (max-width:700px){#fbil{inset:0;border-radius:0}#fbil nav{width:140px}#fbil article{padding:10px 14px}}";
+    document.head.appendChild(st);
+    p = document.createElement("div");
+    p.id = "fbil"; p.hidden = true;
+    p.innerHTML = '<div class="ust"><b>📖 Beste formları</b><span class="bilgi">M. Nazmi Özalp, Türk Mûsikîsi Beste Formları (TRT, 1992)</span>' +
+      '<button class="kapat" title="Kapat (Esc)">✕</button></div><div class="ic"><nav></nav><article></article></div>';
+    document.body.appendChild(p);
+    p.querySelector(".kapat").onclick = () => { p.hidden = true; };
+    // Esc yalniz paneli kapatir (eser acikken listeye donmesin)
+    document.addEventListener("keydown", ev => { if (ev.key === "Escape" && !p.hidden) { p.hidden = true; ev.stopImmediatePropagation(); } }, true);
+    p.addEventListener("click", ev => {
+      const t = ev.target.closest("[data-f], [data-b], [data-listele]");
+      if (!t) return;
+      if (t.dataset.listele != null) return formuListele(t.dataset.listele);
+      goster(t.dataset.f != null ? +t.dataset.f : null, t.dataset.b != null ? +t.dataset.b : null);
+    });
+  }
+  const pdf = s => CV ? "" : FB.pdf + "#page=" + s;  // kitap yalniz bu bilgisayarda
+  const sayfaBag = (yazi, s) => CV ? esc(yazi) : '<a href="' + pdf(s) + '" target="_blank" title="Kitabın PDF\'inde aç">' + esc(yazi) + "</a>";
+  const kaynak = s => '<div class="kaynak">Kaynak: M. Nazmi Özalp, <i>Türk Mûsikîsi Beste Formları</i>, Ankara: TRT Yayınları, 1992' +
+    (s ? ", s. " + esc(s) : "") + ". Açıklama bize ait; tırnak içindeki cümleler kitaptan, sayfası belirtilerek alınmıştır (FSEK md. 35). " +
+    '<a href="' + FORMLAR_GITHUB + '" target="_blank" rel="noopener">FORMLAR.md</a></div>';
+  function goster(fi, bi) {
+    p.querySelectorAll("nav .aktif").forEach(x => x.classList.remove("aktif"));
+    const sec = fi != null ? p.querySelector('nav [data-f="' + fi + '"]') : p.querySelector('nav [data-b="' + bi + '"]');
+    if (sec) { sec.classList.add("aktif"); sec.scrollIntoView({ block: "nearest" }); }
+    const art = p.querySelector("article");
+    art.scrollTop = 0;
+    if (fi == null) {  // giris ya da bolum aciklamasi
+      const b = FB.bolumler[bi];
+      art.innerHTML = b ? "<h2>" + esc(b.ad) + '</h2><div class="bol">Bölüm</div>' + (b.html || "") + "<p>" +
+        FB.formlar.filter(f => f.bolum === b.ad).map(f => '<a href="#" data-f="' + FB.formlar.indexOf(f) + '">' + esc(f.ad) + "</a>").join(" · ") + "</p>" + kaynak()
+        : "<h2>Türk Mûsikîsi Beste Formları</h2>" + FB.giris + kaynak();
+      art.querySelectorAll("a[data-f]").forEach(a => a.addEventListener("click", ev => ev.preventDefault()));
+      return;
+    }
+    const f = FB.formlar[fi], adlar = [...(say.get(fi) || new Map())].sort((a, b) => b[1] - a[1]);
+    const notalar = f.notalar.map(n => {
+      const [s, ad, kesin] = FB.notalar[n] || [], ip = esc((ad || "") + (s && !kesin && !CV ? " (sayfa yaklaşık)" : ""));
+      return s && !CV ? '<a href="' + pdf(s) + '" target="_blank" title="' + ip + '">' + n + "</a>" : '<span title="' + ip + '">' + n + "</span>";
+    });
+    art.innerHTML = "<h2>" + esc(f.ad) + '</h2><div class="bol">' + esc(f.bolum) + "</div>" + f.html +
+      '<div class="meta">' + (f.sayfa ? "Kitapta: " + sayfaBag("s. " + f.sayfa, f.pdf) : "") +
+      (notalar.length ? " · Nota örnekleri: " + notalar.join(", ") : "") + "</div>" +
+      (adlar.length ? '<div class="arsiv">' + adlar.map(([ad, n]) => '<button data-listele="' + esc(ad) + '" title="Bu formdaki eserleri listele">' +
+        esc(ad) + " · " + n.toLocaleString("tr") + " eser</button>").join("") + "</div>" : '<div class="meta">Arşivde bu formda TSM eseri yok.</div>') +
+      kaynak(f.sayfa);
+  }
+  p.querySelector("nav").innerHTML = '<div class="bb" data-b="-1">Kaynak ve açıklama</div>' + FB.bolumler.map((b, bi) =>
+    '<div class="bb" data-b="' + bi + '">' + esc(b.ad) + "</div>" + FB.formlar.map((f, fi) => f.bolum !== b.ad ? "" :
+      '<a data-f="' + fi + '"><span>' + esc(f.ad) + "</span>" + (say.has(fi) ? "<small>" +
+        [...say.get(fi).values()].reduce((t, n) => t + n, 0).toLocaleString("tr") + "</small>" : "") + "</a>").join("")).join("");
+  p.hidden = false;
+  const i = secilen ? FB.formlar.indexOf(secilen) : -1;
+  i >= 0 ? goster(i) : goster(null, -1);
+}
+$("formlar-ac").hidden = !FORM_BILGI;
+$("formlar-ac").onclick = () => formlarAc();
 
 // ---- Kalem: kaydi olmayan notaya bilgi girme; bilgiler bu sayfanin icine yazilir ----
 const FORM_ALANLARI = {
