@@ -168,12 +168,12 @@
 <script>
 (function () {
   var durum = document.getElementById("arsiv-durum"), kutu = document.getElementById("yukleme"),
-      cubuk = document.getElementById("yukleme-cubuk"), BOY = 24432090;
+      cubuk = document.getElementById("yukleme-cubuk"), BOY = 24435140;
   kutu.hidden = false;
   function yaz(y) { durum.textContent = "Katalog yükleniyor… %" + y; cubuk.style.width = y + "%"; }
   function calistir(metin) { var s = document.createElement("script"); s.textContent = metin; document.body.appendChild(s); }
   yaz(0);
-  fetch("veri.c736d07cb0.js").then(async function (r) {
+  fetch("veri.384a348fcb.js").then(async function (r) {
     if (!r.ok) throw new Error("HTTP " + r.status);
     var okur = r.body.getReader(), parcalar = [], n = 0;
     for (;;) {
@@ -224,6 +224,19 @@ const FORM_ACIK = {
   "Kar": "Kâr", "Karçe": "Kârçe", "Karçe-i Nev": "Kârçe-i Nev",
 };
 const formAcik = f => FORM_ACIK[f] || f;
+// Form kararlari (form_karar.py, formlar.xlsx): ham form adina gore TSM kaydina uygulanir.
+// f: form adi degisir, h: THM'ye tasinir, s: silinir (sayfada gosterilmez), b: karar bekliyor. e.fk = [islem, ham form]
+const FORM_KARAR = window.FORM_KARAR || {};
+const KARAR = FORM_KARAR.karar || {};
+function formKarar(e) {
+  if (e[0] !== "S" || !e[5]) return;
+  const ham = e[5].trim(), k = KARAR[ham];
+  if (!k) return;
+  e.fk = [k[0], ham];
+  if (k[0] === "f") e[5] = k[1];
+  else if (k[0] === "h") e[0] = "H";
+  else if (k[0] === "s") e.sil = true;
+}
 // Makam adlarinin tek yazimi (makam_esle.py, kullanicinin karariyla): {arsivdeki yazim: [kartta, suzgecte]}.
 // Kartta parantezli ad (Hicaz (Hümayun)), makam suzgecinde ana makam (Hicaz): e.mk. Suzgec adi liste olabilir
 // (Hicaz Aşiran (Rahatfeza) -> hem Hicaz Aşiran hem Rahatfeza altinda)
@@ -236,15 +249,17 @@ function makamDuzelt(e) {
   if (liste.length && (liste.length > 1 || liste[0] !== kart)) e.mk = liste;
 }
 const alanDegerleri = (e, a) => (a === 4 && e.mk) || [e[a]];
-E.forEach(e => { e[5] = formAcik(e[5]); makamDuzelt(e); });
+E.forEach(e => { formKarar(e); e[5] = formAcik(e[5]); makamDuzelt(e); });
 function eklenmisKayit(dosyalar, k) {
   const e = [k.t, ...k.d, dosyalar];
+  formKarar(e);
   e[5] = formAcik(e[5]);
   makamDuzelt(e);
   e.ek = dosyalar[0];  // kalemle eklendi; yeniden duzenlenebilir
   return e;
 }
 E.forEach((e, i) => { if (e[0] === "K" && EKLER[e[10][0]]) E[i] = eklenmisKayit(e[10], EKLER[e[10][0]]); });
+for (let i = E.length - 1; i >= 0; i--) if (E[i].sil) E.splice(i, 1);  // form karariyla silinenler
 // Kaydi olmayan nota hangi turde listelenir: 2546, o0123, u0045 -> THM; hicaz0123 -> TSM
 const grup = e => e[0] !== "K" ? e[0] : (/^[ou]?\d/.test(e[10][0]) ? "H" : "S");
 
@@ -671,7 +686,7 @@ function sec(n, gecmis = true) {
     dosyaDugmeleri(e);
     return;
   }
-  const kunye = (e[0] === "H"
+  const kunye = (e[0] === "H" && !e.fk  // TSM'den tasinan kayitta TSM alanlari (besteci, soz, makam) kalir
     ? [e[7], e[6], e[2] && "Kaynak: " + e[2], e[3] && "Derleyen: " + e[3], e[8] && "Notaya alan: " + e[8], e[9] && "Rep. " + e[9]]
     : [e[4], e[5], e[6], e[2] && "Besteci: " + e[2], e[3] && "Söz: " + e[3], e[9] && "Rep. " + e[9]]).filter(Boolean).join(" · ");
   const guf = GUFTE[anahtar(e)];
@@ -1086,6 +1101,96 @@ $("f-6").addEventListener("input", () => {
   $("f-6").blur();
   setTimeout(() => $("arsiv-sec").click(), 150);
 });
+// ---- Form kararlari listesi: Rep. no kutusuna "is1" yazilinca acilir (form_karar.py ile yapilan degisiklikler)
+$("f-6").addEventListener("input", () => {
+  if ($("f-6").value.trim().toLowerCase().replace(/ı/g, "i") !== "is1") return;
+  $("f-6").value = "";
+  $("f-6").dispatchEvent(new Event("input"));
+  $("f-6").blur();
+  is1Ac();
+});
+function is1Ac() {
+  let p = $("is1");
+  if (!p) {
+    const st = document.createElement("style");
+    st.textContent = "#is1{position:fixed;inset:5% 8%;z-index:50;background:#fff;border:1px solid var(--cizgi);border-radius:8px;" +
+      "box-shadow:0 8px 30px rgba(0,0,0,.35);display:flex;flex-direction:column;font-size:14px}" +
+      "#is1 .ust{display:flex;gap:6px;align-items:center;padding:10px 12px;background:var(--ana);color:#fff;border-radius:8px 8px 0 0;flex-wrap:wrap}" +
+      "#is1 .ust b{margin-right:8px}#is1 .ust button{border:0;border-radius:5px;padding:6px 10px;cursor:pointer;background:#fff3;color:#fff;font:inherit}" +
+      "#is1 .ust button.aktif{background:#fff;color:var(--ana);font-weight:700}#is1 .ust .kapat{margin-left:auto}" +
+      "#is1 .govde{overflow:auto;padding:8px 12px}#is1 .aciklama{color:var(--soluk);margin:4px 0 8px}" +
+      "#is1 table{border-collapse:collapse;width:100%}#is1 td,#is1 th{border-bottom:1px solid var(--cizgi);padding:4px 6px;text-align:left;vertical-align:top}" +
+      "#is1 tr.ac{cursor:pointer}#is1 tr.ac:hover{background:var(--sari)}#is1 .grup{cursor:pointer;background:var(--acik);font-weight:600}" +
+      "#is1 .eski{color:#a33;text-decoration:line-through}#is1 .yeni{color:#185;font-weight:600}";
+    document.head.appendChild(st);
+    p = document.createElement("div");
+    p.id = "is1";
+    document.body.appendChild(p);
+    document.addEventListener("keydown", ev => { if (ev.key === "Escape" && !p.hidden) p.hidden = true; });
+  }
+  const liste = { f: [], h: [], b: [] };
+  E.forEach((e, i) => { if (e.fk && liste[e.fk[0]]) liste[e.fk[0]].push(i); });
+  const silinen = FORM_KARAR.silinen || [];
+  const sekmeler = [
+    ["s", "Silinenler", silinen.length, "Sayfadan kaldırıldı; notası notalar.zip'ten silindi."],
+    ["h", "THM'ye taşınanlar", liste.h.length, "Artık THM sekmesinde. Besteci, söz, makam alanları TSM'deki gibi kaldı; Rep. no ve yöre boş."],
+    ["f", "Form adı değişenler", liste.f.length, "TSM'de kaldı, form adı birleştirildi ya da düzeltildi. Gruba tıklayınca eserler açılır."],
+    ["b", "Karar bekleyenler", liste.b.length, "Henüz bir şey yapılmadı; formlar.xlsx'te karar bekliyor."],
+  ];
+  const satir = i => {
+    const e = E[i];
+    return '<tr class="ac" data-i="' + i + '"><td>' + esc(e[1] || "(adsız)") + "</td><td>" + esc(e[2] || "") + "</td><td>" + esc(e[4] || "") +
+      '</td><td><span class="eski">' + esc(e.fk[1]) + "</span>" + (e[5] !== e.fk[1] ? ' → <span class="yeni">' + esc(e[5]) + "</span>" : "") +
+      "</td><td>" + esc(e[10].join(" ")) + "</td></tr>";
+  };
+  const baslik = "<tr><th>Eser</th><th>Besteci</th><th>Makam</th><th>Form</th><th>Dosya</th></tr>";
+  function goster(t) {
+    p.querySelectorAll(".ust button[data-t]").forEach(b => b.classList.toggle("aktif", b.dataset.t === t));
+    const [, ad, , acik] = sekmeler.find(s => s[0] === t);
+    let h = '<div class="aciklama">' + esc(acik) + "</div><table>";
+    if (t === "s") {
+      h += "<tr><th>Eser</th><th>Besteci</th><th>Makam</th><th>Form</th><th>Silinen dosya</th><th>Tarih</th></tr>" + silinen.map(k =>
+        "<tr><td>" + esc(k.ad) + "</td><td>" + esc(k.besteci || "") + "</td><td>" + esc(k.makam || "") + "</td><td>" + esc(k.form) +
+        "</td><td>" + esc((k.dosyalar || []).join(" ") || "(notası yoktu)") + "</td><td>" + esc(k.zaman || "") + "</td></tr>").join("");
+    } else if (t === "f") {
+      const gruplar = {};
+      liste.f.forEach(i => { const g = E[i].fk[1] + " → " + E[i][5]; (gruplar[g] = gruplar[g] || []).push(i); });
+      h += "<tr><th>Eski form → yeni form</th><th>Eser</th></tr>" + Object.entries(gruplar).sort((a, b) => b[1].length - a[1].length)
+        .map(([g, l]) => '<tr class="grup" data-g="' + esc(g) + '"><td>' + esc(g) + "</td><td>" + l.length.toLocaleString("tr") + "</td></tr>").join("");
+      h += "</table>";
+      p.querySelector(".govde").innerHTML = h;
+      p.querySelectorAll("tr.grup").forEach(tr => tr.onclick = () => {
+        const sonraki = tr.nextElementSibling;
+        if (sonraki && sonraki.classList.contains("ic")) { sonraki.remove(); return; }
+        const ic = document.createElement("tr");
+        ic.className = "ic";
+        ic.innerHTML = '<td colspan="2"><table>' + baslik + gruplar[tr.dataset.g].map(satir).join("") + "</table></td>";
+        tr.after(ic);
+        baglan(ic);
+      });
+      return;
+    } else h += baslik + liste[t].map(satir).join("");
+    p.querySelector(".govde").innerHTML = h + "</table>";
+    baglan(p.querySelector(".govde"));
+    void ad;
+  }
+  function baglan(kok) {
+    kok.querySelectorAll("tr.ac").forEach(tr => tr.onclick = () => {
+      const i = +tr.dataset.i;
+      p.hidden = true;
+      history.pushState({ i }, "", eserAdresi(i));
+      const n = adrestenEser();
+      if (n >= 0) { listedenGeldi = true; sec(n, false); }
+    });
+  }
+  p.innerHTML = '<div class="ust"><b>Form düzeltmeleri (is1)</b>' +
+    sekmeler.map(([t, ad, n]) => '<button data-t="' + t + '">' + esc(ad) + " (" + n.toLocaleString("tr") + ")</button>").join("") +
+    '<button class="kapat" title="Kapat (Esc)">✕</button></div><div class="govde"></div>';
+  p.querySelectorAll(".ust button[data-t]").forEach(b => b.onclick = () => goster(b.dataset.t));
+  p.querySelector(".kapat").onclick = () => { p.hidden = true; };
+  p.hidden = false;
+  goster("s");
+}
 if (!CV) (async () => {
   try {
     const h = await depo("oku");
